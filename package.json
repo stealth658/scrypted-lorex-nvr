@@ -1,0 +1,39 @@
+{
+  "name": "@stealth658/scrypted-lorex-nvr",
+  "version": "0.1.0",
+  "description": "Lorex/Dahua NVR plugin for Scrypted: one NVR, all channels, one motion connection",
+  "license": "Apache-2.0",
+  "scripts": {
+    "build": "scrypted-webpack",
+    "prepublishOnly": "NODE_ENV=production scrypted-webpack",
+    "scrypted-deploy": "scrypted-deploy",
+    "scrypted-debug": "scrypted-debug",
+    "scrypted-deploy-debug": "scrypted-deploy-debug"
+  },
+  "keywords": [
+    "scrypted",
+    "plugin",
+    "lorex",
+    "dahua",
+    "nvr",
+    "camera"
+  ],
+  "scrypted": {
+    "rollup": true,
+    "name": "Lorex/Dahua NVR",
+    "type": "DeviceProvider",
+    "interfaces": [
+      "ScryptedSystemDevice",
+      "ScryptedDeviceCreator",
+      "DeviceProvider",
+      "DeviceCreator"
+    ],
+    "pluginDependencies": [
+      "@scrypted/prebuffer-mixin"
+    ]
+  },
+  "devDependencies": {
+    "@scrypted/sdk": "latest",
+    "@types/node": "^22.0.0"
+  }
+}
