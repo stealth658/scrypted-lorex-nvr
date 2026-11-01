@@ -6,7 +6,7 @@ Add a Lorex or Dahua NVR once and get every camera on it, with correct per-chann
 
 - **One NVR, all cameras.** Reads the NVR's encode settings to find which channels have cameras, and names each camera from the NVR's channel title.
 - **Correct snapshots.** Requests `snapshot.cgi?channel=N` per camera. Lorex numbers snapshot channels from 0 (camera 1 is `channel=0`); this is the default and can be flipped in Advanced settings.
-- **One motion connection.** Opens a single `eventManager.cgi` stream for the whole NVR and routes each event to the right camera by its index (index 0 is camera 1). Reconnects automatically if the NVR drops it.
+- **One motion connection.** Opens a single `eventManager.cgi` stream for the whole NVR, subscribed to `codes=[VideoMotion]` by default (the same request homebridge-dahua-alerts makes), and routes each event to the right camera by its index (index 0 is camera 1). Reconnects automatically if the NVR drops it.
 - **Login handled up front.** Sends credentials on the first request and switches to Digest if the NVR asks. Some Lorex firmware accepts the event stream without a login and then sends nothing, so waiting to be challenged never works.
 
 Video uses `rtsp://NVR:554/cam/realmonitor?channel=N&subtype=0|1`, with channel numbered from 1.
@@ -44,6 +44,7 @@ npm run scrypted-deploy 192.168.68.80
 | Ignore Channels | Channel numbers to skip, e.g. `6` |
 | Rediscover Cameras | Re-read the NVR after adding a camera or changing stream settings |
 | Event Connection / Last Event | Live status of the motion connection |
+| Subscribed Event Codes | Codes requested from the NVR, default `VideoMotion`. Avoid `All`, which stayed silent on a Lorex NVR |
 | Motion Failsafe (seconds) | Clears motion if the NVR never sends a Stop (default 120) |
 | Extra Motion Event Codes | Treat other event codes as motion, if your NVR uses Lorex-specific ones |
 | Snapshot / Motion Event Numbering | Flip to 1-based if a firmware numbers differently |

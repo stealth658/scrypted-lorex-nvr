@@ -96,7 +96,7 @@ export class DahuaClient {
         return 'Digest ' + parts.join(', ');
     }
 
-    private open(path: string, timeout: number): Promise<IncomingMessage> {
+    private open(path: string, timeout: number, accept = '*/*'): Promise<IncomingMessage> {
         return new Promise((resolve, reject) => {
             const req = http.request({
                 host: this.creds.host,
@@ -105,7 +105,7 @@ export class DahuaClient {
                 method: 'GET',
                 headers: {
                     Authorization: this.authorization('GET', path),
-                    Accept: '*/*',
+                    Accept: accept,
                 },
                 timeout,
             }, resolve);
@@ -118,8 +118,8 @@ export class DahuaClient {
     /**
      * Open a request, retrying once with Digest auth if challenged.
      */
-    async openAuthenticated(path: string, timeout = 10000): Promise<IncomingMessage> {
-        let res = await this.open(path, timeout);
+    async openAuthenticated(path: string, timeout = 10000, accept?: string): Promise<IncomingMessage> {
+        let res = await this.open(path, timeout, accept);
         if (res.statusCode === 401) {
             const challenge = parseDigestChallenge(res.headers['www-authenticate']);
             res.resume();
@@ -128,7 +128,7 @@ export class DahuaClient {
             // a new or stale nonce: switch to digest and retry once.
             this.digest = challenge;
             this.nc = 0;
-            res = await this.open(path, timeout);
+            res = await this.open(path, timeout, accept);
         }
         if (res.statusCode === 401) {
             res.resume();

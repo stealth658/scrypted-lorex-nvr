@@ -349,12 +349,17 @@ export class NvrDevice extends ScryptedDeviceBase implements DeviceProvider, Set
             return;
         this.stopEvents();
         const generation = this.generation;
-        const path = '/cgi-bin/eventManager.cgi?action=attach&codes=[All]&heartbeat=30';
+        // Subscribe to an explicit list of codes, like homebridge-dahua-alerts does.
+        // codes=[All] appeared to stay silent on at least one Lorex NVR.
+        const codes = this.subscribedCodes();
+        const heartbeat = this.storage.getItem('heartbeat') === 'true' ? '&heartbeat=30' : '';
+        const path = `/cgi-bin/eventManager.cgi?action=attach&codes=[${codes.join(',')}]${heartbeat}`;
+        this.console.log('subscribing to events:', path);
         this.eventStatus = 'Connecting';
         let res: IncomingMessage;
         try {
             // no read timeout on the long lived stream; the idle timer handles dead sockets.
-            res = await this.getClient().openAuthenticated(path, 0);
+            res = await this.getClient().openAuthenticated(path, 0, 'multipart/x-mixed-replace');
         }
         catch (e) {
             if (generation === this.generation)
@@ -374,7 +379,7 @@ export class NvrDevice extends ScryptedDeviceBase implements DeviceProvider, Set
         this.eventResponse = res;
         res.socket?.setKeepAlive(true, 30000);
         this.eventStatus = `Connected since ${new Date().toLocaleString()}`;
-        this.console.log('event connection open (one connection for all channels).');
+        this.console.log('event connection open (one connection for all channels).', res.statusCode, res.headers['content-type']);
         this.resetIdle();
 
         const parser = new DahuaEventParser();
@@ -397,6 +402,12 @@ export class NvrDevice extends ScryptedDeviceBase implements DeviceProvider, Set
             if (generation === this.generation)
                 this.scheduleReconnect(`error: ${e.message}`);
         });
+    }
+
+    subscribedCodes(): string[] {
+        const raw = this.storage.getItem('eventCodes') || 'VideoMotion';
+        const codes = raw.split(/[\s,]+/).filter(s => !!s);
+        return codes.length ? codes : ['VideoMotion'];
     }
 
     private extraMotionCodes(): Set<string> {
@@ -503,6 +514,11 @@ export class NvrDevice extends ScryptedDeviceBase implements DeviceProvider, Set
             { group: 'Motion', key: 'eventStatus', title: 'Event Connection', readonly: true, value: this.eventStatus },
             { group: 'Motion', key: 'lastEvent', title: 'Last Event', readonly: true, value: this.lastEvent },
             {
+                group: 'Motion', key: 'eventCodes', title: 'Subscribed Event Codes',
+                description: 'Event codes requested from the NVR. Default VideoMotion, which is what homebridge-dahua-alerts uses. Avoid "All", which may be accepted and then send nothing on some Lorex firmware.',
+                placeholder: 'VideoMotion', value: this.storage.getItem('eventCodes'),
+            },
+            {
                 group: 'Motion', key: 'motionFailsafe', title: 'Motion Failsafe (seconds)', type: 'number',
                 description: 'Clear motion if the NVR never sends a Stop event.',
                 placeholder: '120', value: this.storage.getItem('motionFailsafe'),
@@ -523,6 +539,11 @@ export class NvrDevice extends ScryptedDeviceBase implements DeviceProvider, Set
                 choices: ['0-based', '1-based'], value: this.storage.getItem('eventNumbering') || '0-based',
             },
             {
+                group: 'Advanced', key: 'heartbeat', title: 'Request Heartbeats', type: 'boolean',
+                description: 'Ask the NVR for a keepalive every 30s. Off by default; some firmware may not support it.',
+                value: this.storage.getItem('heartbeat') === 'true',
+            },
+            {
                 group: 'Advanced', key: 'debug', title: 'Debug Events', type: 'boolean',
                 description: 'Log every raw event from the NVR. Noisy; turn off when done.',
                 value: this.storage.getItem('debug') === 'true',
@@ -540,7 +561,7 @@ export class NvrDevice extends ScryptedDeviceBase implements DeviceProvider, Set
             this.client = undefined;
             this.start();
         }
-        else if (key === 'debug') {
+        else if (['debug', 'eventCodes', 'heartbeat'].includes(key)) {
             this.connectEvents();
         }
         this.onDeviceEvent(ScryptedInterface.Settings, undefined);
