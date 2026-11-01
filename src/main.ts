@@ -22,7 +22,7 @@ import sdk, {
 } from '@scrypted/sdk';
 import crypto from 'crypto';
 import { IncomingMessage } from 'http';
-import { ChannelInfo, DahuaClient, DahuaEvent, DahuaEventParser, parseChannels } from './dahua-client';
+import { ChannelInfo, DahuaClient, DahuaEvent, DahuaEventParser, cleanValue, parseChannels, parseRemoteDevices } from './dahua-client';
 
 const { deviceManager } = sdk;
 
@@ -235,7 +235,7 @@ export class NvrDevice extends ScryptedDeviceBase implements DeviceProvider, Set
 
         let maxExtra = 1;
         try {
-            maxExtra = parseInt(await client.magicBox('getProductDefinition', '&name=MaxExtraStream')) || 1;
+            maxExtra = parseInt(await client.magicBox('getProductDefinition', '&name=MaxExtraStream') || '') || 1;
         }
         catch (e) {
             this.console.warn('MaxExtraStream not reported, assuming 1 substream.');
@@ -251,6 +251,16 @@ export class NvrDevice extends ScryptedDeviceBase implements DeviceProvider, Set
         }
 
         const found = parseChannels(encode, titles, maxExtra);
+
+        // what each connected camera reports about itself (model, maker, MAC).
+        try {
+            const remote = parseRemoteDevices(await client.getConfig('RemoteDevice'));
+            for (const c of found)
+                c.camera = remote.get(c.channel);
+        }
+        catch (e) {
+            this.console.warn('could not read connected camera details.', (e as Error).message);
+        }
         if (!found.length)
             throw new Error('the NVR reported no channels with video. Check that the user is an admin.');
 
@@ -259,13 +269,26 @@ export class NvrDevice extends ScryptedDeviceBase implements DeviceProvider, Set
         this.console.log('found channels:', found.map(c => `${c.channel} (${c.name || 'unnamed'})`).join(', '));
 
         try {
+            // MachineName is the real model (e.g. LNR118S); getDeviceType is the
+            // Dahua platform name (e.g. NVR41XX_P_F), used only as a fallback.
+            const general = await client.getConfig('General').catch(() => new Map<string, string>());
             const info = {
                 manufacturer: await client.magicBox('getVendor').catch(() => undefined),
-                model: await client.magicBox('getDeviceType').catch(() => undefined),
+                model: cleanValue(general.get('table.General.MachineName'))
+                    || await client.magicBox('getDeviceType').catch(() => undefined),
                 serialNumber: await client.magicBox('getSerialNo').catch(() => undefined),
                 firmware: await client.magicBox('getSoftwareVersion').catch(() => undefined),
             };
             this.storage.setItem('deviceInfo', JSON.stringify(info));
+            this.info = {
+                ...this.info,
+                manufacturer: info.manufacturer,
+                model: info.model,
+                serialNumber: info.serialNumber,
+                firmware: info.firmware,
+                ip: this.storage.getItem('ip') || undefined,
+                managementUrl: `http://${this.storage.getItem('ip')}`,
+            };
         }
         catch (e) {
         }
@@ -302,12 +325,15 @@ export class NvrDevice extends ScryptedDeviceBase implements DeviceProvider, Set
                     ScryptedInterface.Settings,
                 ],
                 info: {
-                    manufacturer: info.manufacturer || 'Lorex/Dahua',
-                    model: `${info.model || 'NVR'} channel ${c.channel}`,
+                    // only what the hardware reports: the camera's own name (e.g. FLIR), then the NVR vendor.
+                    manufacturer: c.camera?.name || info.manufacturer,
+                    model: c.camera?.model || (info.model ? `${info.model} channel ${c.channel}` : `Channel ${c.channel}`),
                     serialNumber: info.serialNumber ? `${info.serialNumber}-${c.channel}` : undefined,
-                    firmware: info.firmware,
+                    mac: c.camera?.mac,
+                    // the camera's own address is on the NVR's internal PoE network, so manage it through the NVR.
                     ip: this.storage.getItem('ip') || undefined,
                     managementUrl: `http://${this.storage.getItem('ip')}`,
+                    description: `Channel ${c.channel} on ${info.model || 'NVR'}${c.camera?.address ? ` (camera at ${c.camera.address})` : ''}`,
                 },
             });
         }

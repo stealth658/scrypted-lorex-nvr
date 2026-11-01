@@ -156,10 +156,14 @@ export class DahuaClient {
         return parseTable(await this.text(`/cgi-bin/configManager.cgi?action=getConfig&name=${encodeURIComponent(name)}`));
     }
 
-    async magicBox(action: string, extra = '') {
+    /**
+     * Returns the value, or undefined when the NVR doesn't support the request.
+     * Unsupported requests come back as the literal text "Error".
+     */
+    async magicBox(action: string, extra = ''): Promise<string | undefined> {
         const body = await this.text(`/cgi-bin/magicBox.cgi?action=${action}${extra}`);
         const eq = body.indexOf('=');
-        return (eq === -1 ? body : body.substring(eq + 1)).trim();
+        return cleanValue(eq === -1 ? body : body.substring(eq + 1));
     }
 
     /**
@@ -239,6 +243,55 @@ export interface ChannelInfo {
     channel: number;
     name?: string;
     streams: StreamInfo[];
+    camera?: RemoteCameraInfo;
+}
+
+/**
+ * What the camera behind a channel reports about itself, from the NVR's RemoteDevice table.
+ */
+export interface RemoteCameraInfo {
+    // the camera's self reported device name. Lorex/FLIR cameras report the maker here, e.g. "FLIR".
+    name?: string;
+    model?: string;
+    mac?: string;
+    address?: string;
+}
+
+export function cleanValue(v?: string | null): string | undefined {
+    const t = v?.trim();
+    if (!t || t.toLowerCase() === 'error')
+        return undefined;
+    return t;
+}
+
+/**
+ * Parse the RemoteDevice table. Entry N (NETCAMERA_INFO_N) is the camera on channel N+1.
+ * Disabled entries are skipped.
+ */
+export function parseRemoteDevices(table: Map<string, string>): Map<number, RemoteCameraInfo> {
+    const byIndex = new Map<number, Record<string, string>>();
+    for (const [key, value] of table) {
+        const m = /^table\.RemoteDevice\.[^.]*?_(\d+)\.(Address|DeviceType|Enable|Mac|Name)$/.exec(key);
+        if (!m)
+            continue;
+        const index = parseInt(m[1]);
+        if (!byIndex.has(index))
+            byIndex.set(index, {});
+        byIndex.get(index)![m[2]] = value;
+    }
+    const ret = new Map<number, RemoteCameraInfo>();
+    for (const [index, f] of byIndex) {
+        if (f.Enable === 'false')
+            continue;
+        const mac = cleanValue(f.Mac);
+        ret.set(index + 1, {
+            name: cleanValue(f.Name),
+            model: cleanValue(f.DeviceType),
+            mac: mac && mac.toLowerCase() !== 'ff:ff:ff:ff:ff:ff' ? mac : undefined,
+            address: cleanValue(f.Address),
+        });
+    }
+    return ret;
 }
 
 export interface StreamInfo {
