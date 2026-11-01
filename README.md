@@ -13,7 +13,11 @@ Video uses `rtsp://NVR:554/cam/realmonitor?channel=N&subtype=0|1`, with channel 
 
 ## Install
 
-You need Node.js on any computer on the same network as Scrypted.
+You need Node.js on the Scrypted server or any computer on the same network. On the server itself, use `127.0.0.1` in place of the IP below.
+
+```
+git clone https://github.com/stealth658/scrypted-lorex-nvr
+```
 
 ```
 cd scrypted-lorex-nvr
