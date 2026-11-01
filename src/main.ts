@@ -91,8 +91,14 @@ export class ChannelCamera extends ScryptedDeviceBase implements VideoCamera, Ca
     }
 
     async takePicture(options?: RequestPictureOptions): Promise<MediaObject> {
-        const jpeg = await this.nvr.snapshot(this.channel, options?.timeout);
-        return this.createMediaObject(jpeg, 'image/jpeg');
+        try {
+            const jpeg = await this.nvr.snapshot(this.channel, options?.timeout);
+            return this.createMediaObject(jpeg, 'image/jpeg');
+        }
+        catch (e) {
+            this.console.error(`snapshot failed (${this.nvr.snapshotPath(this.channel)}):`, (e as Error).message);
+            throw e;
+        }
     }
 
     async getPictureOptions(): Promise<ResponsePictureOptions[]> {
@@ -193,6 +199,10 @@ export class NvrDevice extends ScryptedDeviceBase implements DeviceProvider, Set
         const pass = encodeURIComponent(this.storage.getItem('password') || '');
         // keep the trailing colon for blank passwords, ffmpeg needs it.
         return `rtsp://${user}:${pass}@${ip}:${port}/cam/realmonitor?channel=${channel}&subtype=${subtype}`;
+    }
+
+    snapshotPath(channel: number) {
+        return `/cgi-bin/snapshot.cgi?channel=${channel - 1 + this.snapshotBase}`;
     }
 
     async snapshot(channel: number, timeout?: number) {
