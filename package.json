@@ -1,6 +1,6 @@
 {
   "name": "@stealth658/scrypted-lorex-nvr",
-  "version": "0.1.0",
+  "version": "0.1.4",
   "description": "Lorex/Dahua NVR plugin for Scrypted: one NVR, all channels, one motion connection",
   "license": "Apache-2.0",
   "scripts": {
