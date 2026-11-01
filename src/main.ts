@@ -313,6 +313,18 @@ export class NvrDevice extends ScryptedDeviceBase implements DeviceProvider, Set
             if (known.has(nativeId) && !rename)
                 continue;
             const existing = known.has(nativeId) ? deviceManager.getDeviceState(nativeId) : undefined;
+            const deviceInfo = {
+                // only what the hardware reports: the camera's own name (e.g. FLIR), then the NVR vendor.
+                manufacturer: c.camera?.name || info.manufacturer,
+                model: c.camera?.model || (info.model ? `${info.model} channel ${c.channel}` : `Channel ${c.channel}`),
+                serialNumber: info.serialNumber ? `${info.serialNumber}-${c.channel}` : undefined,
+                mac: c.camera?.mac,
+                // the camera's own address is on the NVR's internal PoE network, so manage it through the NVR.
+                ip: this.storage.getItem('ip') || undefined,
+                managementUrl: `http://${this.storage.getItem('ip')}`,
+                description: `Channel ${c.channel} on ${info.model || 'NVR'}${c.camera?.address ? ` (camera at ${c.camera.address})` : ''}`,
+            };
+            this.console.log(`channel ${c.channel} info:`, JSON.stringify(deviceInfo));
             await deviceManager.onDeviceDiscovered({
                 providerNativeId: this.nativeId,
                 nativeId,
@@ -324,18 +336,12 @@ export class NvrDevice extends ScryptedDeviceBase implements DeviceProvider, Set
                     ScryptedInterface.MotionSensor,
                     ScryptedInterface.Settings,
                 ],
-                info: {
-                    // only what the hardware reports: the camera's own name (e.g. FLIR), then the NVR vendor.
-                    manufacturer: c.camera?.name || info.manufacturer,
-                    model: c.camera?.model || (info.model ? `${info.model} channel ${c.channel}` : `Channel ${c.channel}`),
-                    serialNumber: info.serialNumber ? `${info.serialNumber}-${c.channel}` : undefined,
-                    mac: c.camera?.mac,
-                    // the camera's own address is on the NVR's internal PoE network, so manage it through the NVR.
-                    ip: this.storage.getItem('ip') || undefined,
-                    managementUrl: `http://${this.storage.getItem('ip')}`,
-                    description: `Channel ${c.channel} on ${info.model || 'NVR'}${c.camera?.address ? ` (camera at ${c.camera.address})` : ''}`,
-                },
+                info: deviceInfo,
             });
+            // also set it on the live device, in case Scrypted keeps the info from an earlier discovery.
+            const cam = this.getCamera(c.channel);
+            if (cam)
+                cam.info = deviceInfo;
         }
     }
 
